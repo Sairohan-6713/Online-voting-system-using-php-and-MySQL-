@@ -1,0 +1,192 @@
+Below is a basic implementation of an **Online Voting System** using PHP and MySQL. It includes features for user authentication, voting, and result viewing.
+
+### Database Schema
+```sql
+CREATE DATABASE online_voting;
+
+USE online_voting;
+
+CREATE TABLE users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    has_voted TINYINT(1) DEFAULT 0
+);
+
+CREATE TABLE candidates (
+    candidate_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    votes INT DEFAULT 0
+);
+
+INSERT INTO candidates (name) VALUES ('Candidate 1'), ('Candidate 2');
+```
+
+### PHP Code
+#### `db.php` - Database Connection
+```php
+<?php
+$host = "localhost";
+$user = "root";
+$pass = "";
+$db = "online_voting";
+
+$conn = new mysqli($host, $user, $pass, $db);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+?>
+```
+
+#### `register.php` - User Registration
+```php
+<?php
+include 'db.php';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $password = password_hash($_POST['password'], PASSWORD_BCRYPT);
+
+    $sql = "INSERT INTO users (username, password) VALUES ('$username', '$password')";
+    if ($conn->query($sql)) {
+        echo "Registration successful! <a href='login.php'>Login here</a>";
+    } else {
+        echo "Error: " . $conn->error;
+    }
+}
+?>
+
+<form method="post">
+    <label>Username:</label><br>
+    <input type="text" name="username" required><br>
+    <label>Password:</label><br>
+    <input type="password" name="password" required><br>
+    <button type="submit">Register</button>
+</form>
+```
+
+#### `login.php` - User Login
+```php
+<?php
+include 'db.php';
+session_start();
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $sql = "SELECT * FROM users WHERE username='$username'";
+    $result = $conn->query($sql);
+
+    if ($result->num_rows == 1) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            $_SESSION['user_id'] = $user['user_id'];
+            header("Location: vote.php");
+            exit();
+        } else {
+            echo "Invalid credentials.";
+        }
+    } else {
+        echo "User not found.";
+    }
+}
+?>
+
+<form method="post">
+    <label>Username:</label><br>
+    <input type="text" name="username" required><br>
+    <label>Password:</label><br>
+    <input type="password" name="password" required><br>
+    <button type="submit">Login</button>
+</form>
+```
+
+#### `vote.php` - Voting Page
+```php
+<?php
+include 'db.php';
+session_start();
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$user_id = $_SESSION['user_id'];
+
+// Check if the user has already voted
+$sql = "SELECT has_voted FROM users WHERE user_id='$user_id'";
+$result = $conn->query($sql);
+$user = $result->fetch_assoc();
+
+if ($user['has_voted']) {
+    echo "You have already voted! <a href='results.php'>View Results</a>";
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $candidate_id = $_POST['candidate_id'];
+
+    // Update votes for the selected candidate
+    $sql = "UPDATE candidates SET votes = votes + 1 WHERE candidate_id='$candidate_id'";
+    $conn->query($sql);
+
+    // Mark the user as having voted
+    $sql = "UPDATE users SET has_voted=1 WHERE user_id='$user_id'";
+    $conn->query($sql);
+
+    echo "Vote cast successfully! <a href='results.php'>View Results</a>";
+    exit();
+}
+
+// Fetch all candidates
+$sql = "SELECT * FROM candidates";
+$candidates = $conn->query($sql);
+?>
+
+<form method="post">
+    <h3>Select a candidate to vote:</h3>
+    <?php while ($candidate = $candidates->fetch_assoc()): ?>
+        <input type="radio" name="candidate_id" value="<?= $candidate['candidate_id'] ?>" required>
+        <?= $candidate['name'] ?><br>
+    <?php endwhile; ?>
+    <button type="submit">Vote</button>
+</form>
+```
+
+#### `results.php` - Display Results
+```php
+<?php
+include 'db.php';
+
+$sql = "SELECT name, votes FROM candidates";
+$candidates = $conn->query($sql);
+?>
+
+<h3>Voting Results:</h3>
+<table border="1">
+    <tr>
+        <th>Candidate</th>
+        <th>Votes</th>
+    </tr>
+    <?php while ($candidate = $candidates->fetch_assoc()): ?>
+        <tr>
+            <td><?= $candidate['name'] ?></td>
+            <td><?= $candidate['votes'] ?></td>
+        </tr>
+    <?php endwhile; ?>
+</table>
+<a href="logout.php">Logout</a>
+```
+
+#### `logout.php` - Logout
+```php
+<?php
+session_start();
+session_destroy();
+header("Location: login.php");
+exit();
+?>
+```
